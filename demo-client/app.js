@@ -5,7 +5,7 @@ function blobToPngBase64(blob) {
 
 function startStreaming() {
   const pngStreamElement = document.querySelector("#png-stream")
-  const socket = new WebSocket("ws://localhost:9002");
+  const socket = new WebSocket(`ws://${location.hostname}:9002`);
   socket.onmessage = async function (event) {
     pngStreamElement.src = blobToPngBase64(event.data);
   }
