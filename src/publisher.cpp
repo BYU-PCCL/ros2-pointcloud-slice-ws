@@ -7,14 +7,12 @@
 #include "png++/png.hpp"
 #include "boost/iostreams/device/array.hpp"
 #include "random"
-#include "png++/rgba_pixel.hpp"
-#include <limits>
 
 using namespace std::chrono_literals;
 
 std::mutex queue_mutex;
 // TODO: See if we're doing some copying when adding images to the queue
-std::queue<png::image<png::rgba_pixel>> message_queue;
+std::queue<png::image<png::gray_pixel_1>> message_queue;
 
 class CloudSliceListener : public rclcpp::Node
 {
@@ -43,7 +41,7 @@ private:
 
 		// TODO: Make these parameters
 		boxFilter.setMin(Eigen::Vector4f(-4.0, -1.0, 0.0, 1.0));
-		boxFilter.setMax(Eigen::Vector4f(4.0, 1.0, 3.0, 1.0));
+		boxFilter.setMax(Eigen::Vector4f(4.0, 1.0, 2.0, 1.0));
 
 		boxFilter.setInputCloud(pcl_cloud);
 		filtered_cloud = pcl::PointCloud<pcl::PointXYZRGB>::Ptr(new pcl::PointCloud<pcl::PointXYZRGB>());
@@ -54,39 +52,20 @@ private:
 	void publish_slice()
 	{
 		// TODO: Make these all parameters
-                double physical_z0 = 0;
-                double physical_z1 = 3.0861;
-                double physical_x0 = -5.4864/2.0;
-		double physical_x1 = 5.4864/2.0;
-		double physical_y0 = 1.0;
-		double physical_y1 = -1.0;
+		double physical_height = 3.0861;
+		double physical_width = 5.4864;
+		double width = 640;
+		double height = 360;
 
-		unsigned int width = 640;
-		unsigned int height = 360;
-
-		png::image<png::rgba_pixel> image(width, height);
-
-		// TODO: Gah name this something better
-		float starting_depth = std::numeric_limits<float>::max();
-		std::vector<float> furthest_forward (width * height, starting_depth);
+		png::image<png::gray_pixel_1> image(width, height);
 
 		for (auto point : filtered_cloud->points) {
-			unsigned int x = ((point.x - physical_x0) / (physical_x1 - physical_x0)) * width;
-			unsigned int y = ((1 - ((point.z - physical_z0) / (physical_z1 - physical_z0))) * height);
-
+			unsigned int x = (point.x + (physical_width/2.0)) * (width/physical_width);
+			unsigned int y = (physical_height - point.z) * (height/physical_height);
 			if (x >= image.get_width() || y >= image.get_height()) {
 				continue;
 			}
-
-			if (furthest_forward[(height * x) + y] < point.y) {
-				continue;
-			}
-
-			furthest_forward[(height * x) + y] = point.y;
-
-			unsigned int z = std::max(std::min(((point.y - physical_y0) / (physical_y1 - physical_y0)) * 255, 255.0), 0.0);
-
-			image[y][x] = png::rgba_pixel(point.r, point.g, point.b, z);
+			image[y][x] = png::gray_pixel_1(1);
 		}
 
 		const std::lock_guard<std::mutex> lock(queue_mutex);
@@ -111,7 +90,7 @@ public:
 
 	void send_queue()
 	{
-		png::image<png::rgba_pixel> image;
+		png::image<png::gray_pixel_1> image;
 		{
 			const std::lock_guard<std::mutex> lock(queue_mutex);
 			if (message_queue.empty()) {
