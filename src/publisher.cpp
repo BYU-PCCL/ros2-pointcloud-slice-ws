@@ -217,11 +217,14 @@ int main(int argc, char *argv[])
 
 	boost::asio::steady_timer listener_timer(service, boost::asio::chrono::milliseconds(30));
 	listener_timer.async_wait(boost::bind(&run_listener, ws_server, &listener_timer));
-	std::thread ros_thread{[&slice_listener](){ rclcpp::spin(slice_listener); }};
-
 	// TODO: Make this port a ROS parameter
 	ws_server->run(9002);
-	service.run();
+
+	std::thread ros_thread{[&slice_listener](){ rclcpp::spin(slice_listener); }};
+	std::thread ws_thread{[&service](){ service.run(); }};
+
+	ros_thread.join();
+	ws_thread.join();
 
 	ws_server->stop();
 	service.stop();
