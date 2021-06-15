@@ -8,7 +8,7 @@
 #include "boost/iostreams/device/array.hpp"
 #include "random"
 #include <png.h>
-#include "png++/rgba_pixel.hpp"
+#include "png++/gray_pixel.hpp"
 #include "png++/writer.hpp"
 #include <limits>
 
@@ -16,9 +16,7 @@ using namespace std::chrono_literals;
 
 std::mutex queue_mutex;
 // TODO: See if we're doing some copying when adding images to the queue
-std::queue<png::pixel_buffer<png::rgba_pixel>> message_queue;
-
-typedef png::row_traits<png::rgba_pixel> rgba_row_traits;
+std::queue<png::pixel_buffer<png::gray_pixel>> message_queue;
 
 class CloudSliceListener : public rclcpp::Node
 {
@@ -68,7 +66,7 @@ private:
 		unsigned int width = 640;
 		unsigned int height = 360;
 
-		png::pixel_buffer<png::rgba_pixel> image(width, height);
+		png::pixel_buffer<png::gray_pixel> image(width, height);
 
 		// TODO: Gah name this something better
 		float starting_depth = std::numeric_limits<float>::max();
@@ -93,7 +91,7 @@ private:
 
 			unsigned int z = std::max(std::min(((point.y - physical_y0) / (physical_y1 - physical_y0)) * 255, 255.0), 0.0);
 
-			image[y][x] = png::rgba_pixel(point.r, point.g, point.b, z);
+			image[y][x] = png::gray_pixel(z);
 		}
 
 		const std::lock_guard<std::mutex> lock(queue_mutex);
@@ -118,7 +116,7 @@ public:
 
 	void send_queue()
 	{
-		png::pixel_buffer<png::rgba_pixel> image;
+		png::pixel_buffer<png::gray_pixel> image;
 		{
 			const std::lock_guard<std::mutex> lock(queue_mutex);
 			if (message_queue.empty())
@@ -132,7 +130,7 @@ public:
 		std::stringstream stream(std::ios::out | std::ios::binary);
 		png::writer<std::ostream> wr(stream);
 
-		auto info = png::make_image_info<png::rgba_pixel>();
+		auto info = png::make_image_info<png::gray_pixel>();
 		// TODO: Remove duplication here
 		info.set_width(640);
 		info.set_height(360);
