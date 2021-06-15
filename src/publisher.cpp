@@ -7,14 +7,19 @@
 #include "png++/png.hpp"
 #include "boost/iostreams/device/array.hpp"
 #include "random"
+#include <png.h>
 #include "png++/rgba_pixel.hpp"
+#include "png++/writer.hpp"
 #include <limits>
 
 using namespace std::chrono_literals;
 
 std::mutex queue_mutex;
 // TODO: See if we're doing some copying when adding images to the queue
-std::queue<png::image<png::rgba_pixel>> message_queue;
+std::queue<png::pixel_buffer<png::rgba_pixel>> message_queue;
+
+typedef png::row_traits<png::rgba_pixel> rgba_row_traits;
+		
 
 class CloudSliceListener : public rclcpp::Node
 {
@@ -64,12 +69,12 @@ private:
 		unsigned int width = 640;
 		unsigned int height = 360;
 
-		png::image<png::rgba_pixel> image(width, height);
+		png::pixel_buffer<png::rgba_pixel> image(width, height);
 
 		// TODO: Gah name this something better
 		float starting_depth = std::numeric_limits<float>::max();
 		std::vector<float> furthest_forward (width * height, starting_depth);
-
+		
 		for (auto point : filtered_cloud->points) {
 			unsigned int x = ((point.x - physical_x0) / (physical_x1 - physical_x0)) * width;
 			unsigned int y = ((1 - ((point.z - physical_z0) / (physical_z1 - physical_z0))) * height);
@@ -111,7 +116,7 @@ public:
 
 	void send_queue()
 	{
-		png::image<png::rgba_pixel> image;
+		png::pixel_buffer<png::rgba_pixel> image;
 		{
 			const std::lock_guard<std::mutex> lock(queue_mutex);
 			if (message_queue.empty()) {
@@ -122,7 +127,27 @@ public:
 		}
 
 		std::stringstream stream(std::ios::out | std::ios::binary);
-		image.write_stream(stream);
+		png::writer< std::ostream > wr(stream);
+
+		auto info = png::make_image_info<png::rgba_pixel>();
+		// TODO: Remove duplication here
+		info.set_width(640);
+		info.set_height(360);
+
+		png_set_compression_level(wr.get_png_struct(), 0);
+
+		wr.set_image_info(info);
+		wr.write_info();
+
+		
+		for (uint32_t pos = 0; pos < info.get_height(); ++pos)
+		{
+			wr.write_row(reinterpret_cast< png::byte* >(&image.get_row(pos)[0]));
+		}
+
+		wr.write_end_info();
+
+		// image.write_stream(stream);
 		// TODO: Do this more efficiently (don't copy so much, so don't use a stringstream)
 		auto string = stream.str();
 		auto raw_data = string.c_str();
