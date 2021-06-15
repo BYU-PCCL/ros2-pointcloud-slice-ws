@@ -8,13 +8,11 @@
 #include "boost/iostreams/device/array.hpp"
 #include "random"
 #include <png.h>
-#include "png++/gray_pixel.hpp"
-#include "png++/writer.hpp"
 #include <limits>
 
 using namespace std::chrono_literals;
 
-typedef png::gray_pixel pixel_type;
+typedef png::rgba_pixel pixel_type;
 typedef png::pixel_buffer<pixel_type> buffer_type;
 
 std::mutex queue_mutex;
@@ -96,7 +94,7 @@ private:
 
 			unsigned int z = std::max(std::min(((point.y - physical_y0) / (physical_y1 - physical_y0)) * 255, 255.0), 0.0);
 
-			image[y][x] = pixel_type(z);
+			image[y][x] = pixel_type(point.r, point.g, point.b, z);
 		}
 
 		const std::lock_guard<std::mutex> lock(queue_mutex);
@@ -121,7 +119,7 @@ public:
 
 	void send_queue()
 	{
-		png::pixel_buffer<png::gray_pixel> image;
+		png::pixel_buffer<pixel_type> image;
 		{
 			const std::lock_guard<std::mutex> lock(queue_mutex);
 			if (message == nullptr)
@@ -135,12 +133,12 @@ public:
 		std::stringstream stream(std::ios::out | std::ios::binary);
 		png::writer<std::ostream> wr(stream);
 
-		auto info = png::make_image_info<png::gray_pixel>();
+		auto info = png::make_image_info<pixel_type>();
 		// TODO: Remove duplication here
 		info.set_width(640);
 		info.set_height(360);
 
-		png_set_compression_level(wr.get_png_struct(), 0);
+		png_set_compression_level(wr.get_png_struct(), 2);
 
 		wr.set_image_info(info);
 		wr.write_info();
