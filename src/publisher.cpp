@@ -14,9 +14,14 @@
 
 using namespace std::chrono_literals;
 
+typedef png::gray_pixel pixel_type;
+typedef png::pixel_buffer<pixel_type> buffer_type;
+
 std::mutex queue_mutex;
 // TODO: See if we're doing some copying when adding images to the queue
-std::queue<png::pixel_buffer<png::gray_pixel>> message_queue;
+
+std::shared_ptr<buffer_type> message(nullptr);
+
 
 class CloudSliceListener : public rclcpp::Node
 {
@@ -66,7 +71,7 @@ private:
 		unsigned int width = 640;
 		unsigned int height = 360;
 
-		png::pixel_buffer<png::gray_pixel> image(width, height);
+		buffer_type image(width, height);
 
 		// TODO: Gah name this something better
 		float starting_depth = std::numeric_limits<float>::max();
@@ -91,11 +96,11 @@ private:
 
 			unsigned int z = std::max(std::min(((point.y - physical_y0) / (physical_y1 - physical_y0)) * 255, 255.0), 0.0);
 
-			image[y][x] = png::gray_pixel(z);
+			image[y][x] = pixel_type(z);
 		}
 
 		const std::lock_guard<std::mutex> lock(queue_mutex);
-		message_queue.push(image);
+		message = std::make_shared<buffer_type>(image);
 	}
 	rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr subscription;
 	std::string point_cloud_topic;
@@ -119,12 +124,12 @@ public:
 		png::pixel_buffer<png::gray_pixel> image;
 		{
 			const std::lock_guard<std::mutex> lock(queue_mutex);
-			if (message_queue.empty())
+			if (message == nullptr)
 			{
 				return;
 			}
-			image = message_queue.front();
-			message_queue.pop();
+			image = *message;
+			message.reset();
 		}
 
 		std::stringstream stream(std::ios::out | std::ios::binary);
