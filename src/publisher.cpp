@@ -186,13 +186,12 @@ private:
 	std::set<websocketpp::connection_hdl, std::owner_less<websocketpp::connection_hdl>> connections;
 };
 
-void run_publisher(std::shared_ptr<rclcpp::Node> node, std::shared_ptr<SliceWebSocketServer> ws_server, boost::asio::steady_timer *t)
+void run_listener(std::shared_ptr<SliceWebSocketServer> ws_server, boost::asio::steady_timer *t)
 {
 	// TODO: See if there's a better way to let rclcpp spin independently, because this code looks like it will do more blocking than we'd like
-	rclcpp::spin_some(node);
 	ws_server->send_queue();
 	t->expires_at(t->expiry() + boost::asio::chrono::milliseconds(30));
-	t->async_wait(boost::bind(run_publisher, node, ws_server, t));
+	t->async_wait(boost::bind(run_listener, ws_server, t));
 }
 
 std::shared_ptr<SliceWebSocketServer> ws_server;
@@ -214,8 +213,11 @@ int main(int argc, char *argv[])
 
 	ws_server = std::make_shared<SliceWebSocketServer>(&service);
 
+	// https://theboostcpplibraries.com/boost.asio-scalability
+
 	boost::asio::steady_timer listener_timer(service, boost::asio::chrono::milliseconds(30));
-	listener_timer.async_wait(boost::bind(&run_publisher, slice_listener, ws_server, &listener_timer));
+	listener_timer.async_wait(boost::bind(&run_listener, ws_server, &listener_timer));
+	std::thread ros_thread{[&slice_listener](){ rclcpp::spin(slice_listener); }};
 
 	// TODO: Make this port a ROS parameter
 	ws_server->run(9002);
