@@ -19,7 +19,6 @@ std::mutex queue_mutex;
 std::queue<png::pixel_buffer<png::rgba_pixel>> message_queue;
 
 typedef png::row_traits<png::rgba_pixel> rgba_row_traits;
-		
 
 class CloudSliceListener : public rclcpp::Node
 {
@@ -59,10 +58,10 @@ private:
 	void publish_slice()
 	{
 		// TODO: Make these all parameters
-                double physical_z0 = 0;
-                double physical_z1 = 3.0861;
-                double physical_x0 = -5.4864/2.0;
-		double physical_x1 = 5.4864/2.0;
+		double physical_z0 = 0;
+		double physical_z1 = 3.0861;
+		double physical_x0 = -5.4864 / 2.0;
+		double physical_x1 = 5.4864 / 2.0;
 		double physical_y0 = 1.0;
 		double physical_y1 = -1.0;
 
@@ -73,17 +72,20 @@ private:
 
 		// TODO: Gah name this something better
 		float starting_depth = std::numeric_limits<float>::max();
-		std::vector<float> furthest_forward (width * height, starting_depth);
-		
-		for (auto point : filtered_cloud->points) {
+		std::vector<float> furthest_forward(width * height, starting_depth);
+
+		for (auto point : filtered_cloud->points)
+		{
 			unsigned int x = ((point.x - physical_x0) / (physical_x1 - physical_x0)) * width;
 			unsigned int y = ((1 - ((point.z - physical_z0) / (physical_z1 - physical_z0))) * height);
 
-			if (x >= image.get_width() || y >= image.get_height()) {
+			if (x >= image.get_width() || y >= image.get_height())
+			{
 				continue;
 			}
 
-			if (furthest_forward[(height * x) + y] < point.y) {
+			if (furthest_forward[(height * x) + y] < point.y)
+			{
 				continue;
 			}
 
@@ -119,7 +121,8 @@ public:
 		png::pixel_buffer<png::rgba_pixel> image;
 		{
 			const std::lock_guard<std::mutex> lock(queue_mutex);
-			if (message_queue.empty()) {
+			if (message_queue.empty())
+			{
 				return;
 			}
 			image = message_queue.front();
@@ -127,7 +130,7 @@ public:
 		}
 
 		std::stringstream stream(std::ios::out | std::ios::binary);
-		png::writer< std::ostream > wr(stream);
+		png::writer<std::ostream> wr(stream);
 
 		auto info = png::make_image_info<png::rgba_pixel>();
 		// TODO: Remove duplication here
@@ -139,10 +142,9 @@ public:
 		wr.set_image_info(info);
 		wr.write_info();
 
-		
 		for (uint32_t pos = 0; pos < info.get_height(); ++pos)
 		{
-			wr.write_row(reinterpret_cast< png::byte* >(&image.get_row(pos)[0]));
+			wr.write_row(reinterpret_cast<png::byte *>(&image.get_row(pos)[0]));
 		}
 
 		wr.write_end_info();
@@ -151,8 +153,9 @@ public:
 		// TODO: Do this more efficiently (don't copy so much, so don't use a stringstream)
 		auto string = stream.str();
 		auto raw_data = string.c_str();
-		
-		for (auto it: connections) {
+
+		for (auto it : connections)
+		{
 			ws_server.send(it, raw_data, string.size(), websocketpp::frame::opcode::binary);
 		}
 	}
@@ -175,7 +178,8 @@ public:
 		ws_server.start_accept();
 	}
 
-	void stop() {
+	void stop()
+	{
 		ws_server.stop_listening();
 	}
 
@@ -195,9 +199,10 @@ void run_publisher(std::shared_ptr<rclcpp::Node> node, std::shared_ptr<SliceWebS
 
 std::shared_ptr<SliceWebSocketServer> ws_server;
 
-void signal_handler(int signum) {
+void signal_handler(int signum)
+{
 	ws_server->stop();
-	exit(signum);  
+	exit(signum);
 }
 
 int main(int argc, char *argv[])
